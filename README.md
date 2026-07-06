@@ -297,7 +297,7 @@ ORDER BY vendor, doc_name, chunk_id
 - 使用 `IndexFlatIP` 回傳的 inner product 分數排序；分數越高代表越相似。
 - 中文查詢會額外轉成英文關鍵字再查一次。
 - 英文品牌詞、產品詞與型號詞會額外查詢，提高專有名詞命中率。
-- 預設每次向量搜尋取 `VEC_K_EACH=10`。
+- 預設每次向量搜尋取 `VEC_K_EACH=20`。
 
 ### BM25 關鍵字搜尋
 
@@ -307,7 +307,7 @@ ORDER BY vendor, doc_name, chunk_id
 - 英文、數字、型號會用 regex 抽出 token。
 - 英文字會同時保留原始大小寫與小寫版本。
 - 若 BM25 所有文件分數都是 0，該路結果會回傳空集合，不會把無命中文件丟進 RRF。
-- 預設取 `KW_K_EACH=10`。
+- 預設取 `KW_K_EACH=20`。
 
 ## RRF 融合排序
 
@@ -326,6 +326,8 @@ K = 60
 ALPHA_VEC = 0.5
 ```
 
+這裡的 `K=60` 是 RRF 公式中的排名平滑參數，不是代表取 60 筆資料。它會降低單一路檢索排名差距的影響，讓「同時被多種檢索方式命中」的文件更容易排到前面。
+
 最後融合分數：
 
 ```text
@@ -334,7 +336,7 @@ ALPHA_VEC = 0.5
 
 這代表文件如果同時被 FAISS 與 BM25 找到，通常會比只被單一檢索方式找到更優先。
 
-主流程中 `hybrid_retrieve(..., out_k=INITIAL_K)` 的 `INITIAL_K=10`，所以 RRF 融合後會先保留最多 10 個候選 chunks 交給 reranker。
+主流程中 `hybrid_retrieve(..., out_k=INITIAL_K)` 的 `INITIAL_K=20`，所以 RRF 融合後會先保留最多 20 個候選 chunks 交給 reranker。這樣 reranker 有較完整的候選池可以比較，比只取 10 筆更適合模糊查詢、專有名詞查詢與查詢改寫後的多路檢索。
 
 ## CrossEncoder Reranking
 
@@ -355,7 +357,7 @@ cross-encoder/ms-marco-MiniLM-L-6-v2
 相關參數：
 
 ```text
-INITIAL_K=10
+INITIAL_K=20
 RERANK_TOP_K=5
 RELEVANCE_TH=0.32
 RELEVANCE_TH_MODEL=0.18
@@ -364,7 +366,7 @@ MAX_CTX_CHARS=2200
 
 reranker 會用 `(query, candidate text)` 配對計算相關分數，最後保留最相關的 chunks 作為 LLM context。
 
-主流程中 `RERANK_TOP_K=5`，所以 reranker 會把 RRF 輸出的最多 10 個候選 chunks 重新排序後，保留前 5 個。若 reranker 模型載入失敗，系統會直接用 RRF 融合分數排序並取前 5 個。
+主流程中 `RERANK_TOP_K=5`，所以 reranker 會把 RRF 輸出的最多 20 個候選 chunks 重新排序後，保留前 5 個。若 reranker 模型載入失敗，系統會直接用 RRF 融合分數排序並取前 5 個。
 
 ## LLM 回答生成
 

@@ -133,10 +133,11 @@ wx_model = ModelInference(
 INDEX_PATH     = "rag_index/md_chunks.faiss"
 META_PATH      = "rag_index/md_meta.parquet"
 EMBED_MODEL    = "intfloat/multilingual-e5-base"
-INITIAL_K      = 10
+INITIAL_K      = 20
 RERANK_TOP_K   = 5
-VEC_K_EACH     = 10
-KW_K_EACH      = 10
+VEC_K_EACH     = 20
+KW_K_EACH      = 20
+RRF_K          = 60.0
 ALPHA_VEC      = 0.5
 RELEVANCE_TH_MODEL = 0.18
 RELEVANCE_TH   = 0.32
@@ -254,11 +255,11 @@ def _keyword_search(query: str, k: int, q_en: str = None):
 def _rrf_fuse(vec_pairs, kw_pairs, out_k: int):
     v_sorted = sorted(vec_pairs, key=lambda x: x[1], reverse=True)
     k_sorted = sorted(kw_pairs,  key=lambda x: x[1], reverse=True)
-    rrf = {}; K = 60.0
+    rrf = {}
     for rank, (i, _) in enumerate(v_sorted, start=1):
-        rrf[i] = rrf.get(i, 0.0) + 1.0 / (K + rank)
+        rrf[i] = rrf.get(i, 0.0) + 1.0 / (RRF_K + rank)
     for rank, (i, _) in enumerate(k_sorted, start=1):
-        rrf[i] = rrf.get(i, 0.0) + 1.0 / (K + rank)
+        rrf[i] = rrf.get(i, 0.0) + 1.0 / (RRF_K + rank)
     fused = {}
     v_map = {i: s for i, s in vec_pairs}
     k_map = {i: s for i, s in kw_pairs}
