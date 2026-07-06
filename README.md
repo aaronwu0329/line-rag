@@ -1,59 +1,61 @@
 # LINE RAG Product Assistant
 
-LINE RAG Product Assistant is a Flask-based LINE Bot that answers product and solution questions with retrieval-augmented generation. It combines local product documents, FAISS vector search, BM25 keyword search, reranking, IBM watsonx.ai generation, and an optional OpenAI fallback for low-confidence answers.
+這是一個以 Flask 建立的 LINE Bot 產品問答助理，使用 RAG（Retrieval-Augmented Generation）流程回答產品、方案與技術資訊問題。系統會結合本機知識文件、FAISS 向量搜尋、BM25 關鍵字搜尋、reranking、IBM watsonx.ai 文字生成，並可在低信心回答時啟用 OpenAI fallback。
 
-## Features
+## 功能特色
 
-- LINE Messaging API webhook built with Flask.
-- Hybrid retrieval with FAISS vector search and BM25 keyword matching.
-- Sentence-transformers embeddings and cross-encoder reranking.
-- IBM watsonx.ai as the primary answer generation backend.
-- Optional OpenAI fallback when local retrieval confidence is low.
-- Product and brand helper flows for IBM, Palo Alto Networks, Qlik, Splunk, SUSE, Synopsys, TIBCO, MongoDB, Cloudera, CloudCasa, SAS, and related IBM Power models.
-- Brand/product image responses through LINE image messages.
-- Excel, TXT, Parquet, and FAISS index build scripts for maintaining the knowledge base.
+- 使用 Flask 提供 LINE Messaging API webhook。
+- 以 FAISS 向量搜尋搭配 BM25 關鍵字搜尋做混合檢索。
+- 使用 sentence-transformers 產生 embeddings，並以 cross-encoder 重新排序候選內容。
+- 以 IBM watsonx.ai 作為主要回答生成後端。
+- 可選擇啟用 OpenAI fallback，處理本機檢索信心不足的問題。
+- 內建產品與品牌導引回覆，涵蓋 IBM、Palo Alto Networks、Qlik、Splunk、SUSE、Synopsys、TIBCO、MongoDB、Cloudera、CloudCasa、SAS 與 IBM Power 系列型號。
+- 支援透過 LINE image message 回傳品牌或產品圖片。
+- 提供 Excel、TXT、Parquet 與 FAISS index 建置腳本，方便維護知識庫。
 
-## Project Structure
+## 專案結構
 
 ```text
 .
-├── rag_cli.py                 # Main Flask + LINE Bot application
-├── fallback.py                # Optional OpenAI fallback integration
-├── product_faq.py             # Product catalog, aliases, and guided replies
-├── query_normalize.py         # Query normalization helpers
-├── ingest_xlsx.py             # Build/update RAG index from Excel and TXT sources
-├── build_index.py             # Build FAISS index from chunks.parquet
-├── export_chunks.py           # Export source chunks
-├── Additional information/    # Excel knowledge sources
-├── txt_docs/                  # TXT knowledge sources
-├── rag_index/                 # Generated FAISS index and metadata
-└── static/brand/              # Brand and product images
+├── rag_cli.py                 # Flask 與 LINE Bot 主程式
+├── fallback.py                # OpenAI fallback 整合
+├── product_faq.py             # 產品清單、別名與導引回覆
+├── query_normalize.py         # 查詢正規化工具
+├── ingest_xlsx.py             # 從 Excel/TXT 建立或更新 RAG index
+├── build_index.py             # 從 chunks.parquet 建立 FAISS index
+├── export_chunks.py           # 匯出文字區塊
+├── Additional information/    # Excel 知識來源
+├── txt_docs/                  # TXT 知識來源
+├── rag_index/                 # 已建立的 FAISS index 與 metadata
+├── static/brand/              # 品牌與產品圖片
+├── requirements.txt           # Python 相依套件
+└── .env.example               # 環境變數範例
 ```
 
-## Requirements
+## 系統需求
 
-- Python 3.10+
-- LINE Developers channel access token and channel secret
-- IBM Cloud watsonx.ai API key and project ID
-- Optional OpenAI API key for fallback answers
+- Python 3.10 或更新版本
+- LINE Developers channel access token 與 channel secret
+- IBM Cloud watsonx.ai API key 與 project ID
+- OpenAI API key（選用，只有啟用 fallback 時需要）
 
-Install dependencies:
+安裝相依套件：
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Some packages, especially `faiss-cpu`, `sentence-transformers`, and model downloads, can take time to install on a fresh machine.
+初次安裝時，`faiss-cpu`、`sentence-transformers` 與模型下載可能需要較久時間。
 
-## Configuration
+## 環境設定
 
-Copy `.env.example` to `.env` and fill in your credentials:
+複製 `.env.example` 成 `.env`，再填入實際金鑰與設定值：
 
 ```bash
 cp .env.example .env
 ```
 
-Required variables:
+必要變數：
 
 ```env
 IBM_API_KEY=
@@ -65,7 +67,7 @@ LINE_CHANNEL_ACCESS_TOKEN=
 LINE_CHANNEL_SECRET=
 ```
 
-Optional fallback variables:
+OpenAI fallback 選用變數：
 
 ```env
 ENABLE_OPENAI_FALLBACK=true
@@ -73,47 +75,46 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 ```
 
-Do not commit `.env`; only `.env.example` should be shared.
+請勿提交 `.env`；專案只應分享 `.env.example`。
 
-## Run
+## 執行方式
 
-Start the webhook server:
+啟動 webhook server：
 
 ```bash
 python rag_cli.py
 ```
 
-The app listens on `0.0.0.0:8000` by default. Set `PORT` to change it:
+預設會監聽 `0.0.0.0:8000`。如需指定 port，可設定 `PORT`：
 
 ```bash
 PORT=8080 python rag_cli.py
 ```
 
-Expose the server through a public HTTPS URL, then configure the LINE webhook URL:
+LINE webhook 需要公開 HTTPS URL。將本機服務透過 ngrok、Cloudflare Tunnel 或正式部署環境公開後，在 LINE Developers 後台設定：
 
 ```text
 https://your-domain.example/callback
 ```
 
-## Rebuild the Knowledge Index
+## 重建知識索引
 
-To rebuild or update the RAG index from the Excel and TXT sources:
+從 Excel 與 TXT 來源重建或更新 RAG index：
 
 ```bash
 python ingest_xlsx.py
 ```
 
-To rebuild from `chunks.parquet`:
+從 `chunks.parquet` 重建 FAISS index：
 
 ```bash
 python build_index.py
 ```
 
-Generated files are stored under `rag_index/`.
+產生的索引檔會儲存在 `rag_index/`。
 
-## Notes
+## 注意事項
 
-- Keep API keys, channel secrets, and private credentials in `.env`.
-- The repository includes sample/source knowledge files and a prebuilt local index so the bot can be restored more easily.
-- Large model files are downloaded by `sentence-transformers` at runtime and are not stored in this repository.
-
+- API key、LINE channel secret 與其他私密設定請放在 `.env`。
+- 此 repo 包含知識來源檔案與預先建立的本機 index，方便還原與部署。
+- sentence-transformers 需要的模型會在執行時下載，不會存放在此 repository。
