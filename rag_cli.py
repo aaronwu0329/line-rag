@@ -54,7 +54,7 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 IBM_API_KEY    = os.getenv("IBM_API_KEY")
 IBM_PROJECT_ID = os.getenv("IBM_PROJECT_ID")
 IBM_CLOUD_URL  = os.getenv("IBM_CLOUD_URL", "https://us-south.ml.cloud.ibm.com")
-IBM_MODEL_ID   = os.getenv("IBM_MODEL_ID", "meta-llama/llama-4-maverick-17b-128e-instruct-fp8")
+IBM_MODEL_ID   = os.getenv("IBM_MODEL_ID", "openai/gpt-oss-120b")
 
 # Reranker
 RERANKER_ID_PRIMARY   = os.getenv("RERANKER_ID", "BAAI/bge-reranker-v2-m3")
