@@ -1,0 +1,16 @@
+faiss-cpu
+Flask
+ibm-watsonx-ai
+jieba
+line-bot-sdk
+numpy
+opencc-python-reimplemented
+pandas
+pyarrow
+pyhive
+python-dotenv
+rank-bm25
+requests
+sentence-transformers
+tqdm
+Werkzeug
