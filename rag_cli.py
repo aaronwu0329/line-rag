@@ -218,11 +218,11 @@ except Exception as e1:
 # =========================================================
 def _vector_search(query: str, k: int):
     q_norm = normalize_whitespace(query or "")
-    q = embedder.encode([q_norm], convert_to_numpy=True, normalize_embeddings=True)
+    q_for_embed = f"query: {q_norm}" if q_norm else ""
+    q = embedder.encode([q_for_embed], convert_to_numpy=True, normalize_embeddings=True)
     D, I = index.search(q, k)
     dists = D[0]; idxs = I[0]
-    sims = [1.0 / (1.0 + float(d)) for d in dists]
-    return list(zip(idxs.tolist(), sims))
+    return [(int(i), float(d)) for i, d in zip(idxs.tolist(), dists) if int(i) >= 0]
 
 _EN_RE = re.compile(r"[A-Za-z][A-Za-z0-9_.+\-/#]*")
 
@@ -241,11 +241,13 @@ def _keyword_search(query: str, k: int, q_en: str = None):
     n_docs = scores.size
     if n_docs == 0:
         return []
+    max_score = float(scores.max())
+    if max_score <= 0:
+        return []
     n = min(k, n_docs)
     top_idx = np.argpartition(scores, -n)[-n:]
     top_idx = top_idx[np.argsort(scores[top_idx])[::-1]]
-    denom = float(scores.max()); denom = 1.0 if denom <= 0 else denom
-    sims = (scores[top_idx] / denom).tolist()
+    sims = (scores[top_idx] / max_score).tolist()
     return list(zip(top_idx.tolist(), sims))
 
 
@@ -324,6 +326,8 @@ def translate_zh_to_en(q_zh: str) -> str:
         f"{q_zh}"
     )
     ans = raw_generate(prompt).strip()
+    if ans.startswith("(LLM error:"):
+        return q_zh
     return ans if re.search(r"[A-Za-z]", ans) and not re.search(r"[\u4e00-\u9fff]", ans) else q_zh
 
 def hybrid_retrieve(query: str, out_k: int = INITIAL_K):

@@ -204,7 +204,13 @@ model.encode(..., convert_to_numpy=True, normalize_embeddings=True)
 intfloat/multilingual-e5-base
 ```
 
-查詢文字會先經過正規化與改寫，再送進 `SentenceTransformer.encode`，同樣使用 `normalize_embeddings=True`。目前查詢端程式直接 encode 改寫後的 query 字串，文件端則使用 `passage:` prefix。
+查詢文字會先經過正規化與改寫，並加上 e5 查詢端 prefix：
+
+```text
+query: {rewritten query}
+```
+
+接著送進 `SentenceTransformer.encode`，同樣使用 `normalize_embeddings=True`。文件端使用 `passage:` prefix，查詢端使用 `query:` prefix，符合 e5 系列模型的檢索格式。
 
 ### FAISS 索引
 
@@ -215,6 +221,8 @@ faiss.IndexFlatIP(dim)
 ```
 
 因為文件向量與查詢向量都有 normalize，所以 inner product 可用來近似 cosine similarity。
+
+查詢時直接使用 FAISS `IndexFlatIP` 回傳的 inner product 分數作為向量相似度，不再把分數轉成距離，避免高相似度反而被排低。
 
 輸出檔案：
 
@@ -285,6 +293,8 @@ ORDER BY vendor, doc_name, chunk_id
 ### FAISS 向量搜尋
 
 - 使用改寫後的查詢做向量搜尋。
+- 查詢端會加上 `query:` prefix，再做 embedding。
+- 使用 `IndexFlatIP` 回傳的 inner product 分數排序；分數越高代表越相似。
 - 中文查詢會額外轉成英文關鍵字再查一次。
 - 英文品牌詞、產品詞與型號詞會額外查詢，提高專有名詞命中率。
 - 預設每次向量搜尋取 `VEC_K_EACH=10`。
@@ -296,6 +306,7 @@ ORDER BY vendor, doc_name, chunk_id
 - 中文用 `jieba` 斷詞。
 - 英文、數字、型號會用 regex 抽出 token。
 - 英文字會同時保留原始大小寫與小寫版本。
+- 若 BM25 所有文件分數都是 0，該路結果會回傳空集合，不會把無命中文件丟進 RRF。
 - 預設取 `KW_K_EACH=10`。
 
 ## RRF 融合排序
@@ -322,6 +333,8 @@ ALPHA_VEC = 0.5
 ```
 
 這代表文件如果同時被 FAISS 與 BM25 找到，通常會比只被單一檢索方式找到更優先。
+
+主流程中 `hybrid_retrieve(..., out_k=INITIAL_K)` 的 `INITIAL_K=10`，所以 RRF 融合後會先保留最多 10 個候選 chunks 交給 reranker。
 
 ## CrossEncoder Reranking
 
@@ -350,6 +363,8 @@ MAX_CTX_CHARS=2200
 ```
 
 reranker 會用 `(query, candidate text)` 配對計算相關分數，最後保留最相關的 chunks 作為 LLM context。
+
+主流程中 `RERANK_TOP_K=5`，所以 reranker 會把 RRF 輸出的最多 10 個候選 chunks 重新排序後，保留前 5 個。若 reranker 模型載入失敗，系統會直接用 RRF 融合分數排序並取前 5 個。
 
 ## LLM 回答生成
 
