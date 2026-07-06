@@ -4,7 +4,15 @@
 
 ## 快速開始
 
-接手工程師可以用以下順序啟動專案：
+最短部署流程：
+
+1. 安裝鎖定版本的 Python 套件。
+2. 複製 `.env.example` 成 `.env`，填入 IBM watsonx.ai 與 LINE 金鑰。
+3. 確認 `rag_index/md_chunks.faiss` 與 `rag_index/md_meta.parquet` 已存在。
+4. 執行 `python rag_cli.py` 啟動 Flask webhook server。
+5. 在 LINE Developers 設定公開 HTTPS callback URL：`https://your-domain.example/callback`。
+
+對應指令如下：
 
 ```bash
 pip install -r requirements.txt
