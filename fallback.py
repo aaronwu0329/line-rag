@@ -5,7 +5,7 @@ from dataclasses import dataclass
 @dataclass
 class OAIConfig:
     min_local_score: float = 0.32
-    model: str = "gpt-4.1-mini"
+    model: str = "gpt-5.4"
     base_url: str = "https://api.openai.com/v1"
     timeout_sec: float = 15.0
     use_responses_api: bool = False
@@ -99,7 +99,7 @@ def enable_fallback(env: dict, *, config: OAIConfig | None = None):
 
     cfg = config or OAIConfig(
         min_local_score=float(os.getenv("OAI_MIN_LOCAL_SCORE", str(RELEVANCE_TH))),
-        model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+        model=os.getenv("OPENAI_MODEL", "gpt-5.4"),
         base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         timeout_sec=float(os.getenv("OPENAI_TIMEOUT_SEC", "15")),
         use_responses_api=os.getenv("OPENAI_USE_RESPONSES","0") in {"1","true","yes","on"}

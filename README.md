@@ -76,7 +76,7 @@ https://your-domain.example/callback
 - `intfloat/multilingual-e5-base`：embedding 模型，負責把知識文件與使用者查詢轉成向量，用於 FAISS 檢索。
 - `BAAI/bge-reranker-v2-m3`：主要 reranker，負責重新排序 FAISS/BM25/RRF 找到的候選段落。
 - `cross-encoder/ms-marco-MiniLM-L-6-v2`：reranker 載入失敗時的 fallback reranker。
-- `gpt-4.1-mini`：OpenAI fallback 模型，只有在本機 RAG 信心不足且 fallback 啟用時使用。
+- `gpt-5.4`：OpenAI fallback 模型，只有在本機 RAG 信心不足且 fallback 啟用時使用。
 
 因此 `openai/gpt-oss-120b` 不會取代 embedding 或 reranker。檢索階段仍需要專門的 embedding 與 reranking 模型，生成階段才使用 `openai/gpt-oss-120b`。
 
@@ -381,7 +381,7 @@ OpenAI fallback 在 `fallback.py`。
 ```env
 ENABLE_OPENAI_FALLBACK=true
 OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4.1-mini
+OPENAI_MODEL=gpt-5.4
 OAI_MIN_LOCAL_SCORE=0.32
 ```
 
@@ -474,7 +474,7 @@ LINE_CHANNEL_SECRET=
 ```env
 ENABLE_OPENAI_FALLBACK=true
 OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4.1-mini
+OPENAI_MODEL=gpt-5.4
 ```
 
 請勿提交 `.env`；repo 只保留 `.env.example`。
@@ -511,7 +511,7 @@ OPENAI_MODEL=gpt-4.1-mini
 | `PLACEHOLDER_IMAGE_URL` | 圖片 fallback URL | 空 |
 | `ENABLE_OPENAI_FALLBACK` | 是否啟用 OpenAI fallback | `true` |
 | `OPENAI_API_KEY` | OpenAI API key | 空 |
-| `OPENAI_MODEL` | OpenAI fallback 模型 | `gpt-4.1-mini` |
+| `OPENAI_MODEL` | OpenAI fallback 模型 | `gpt-5.4` |
 | `OAI_MIN_LOCAL_SCORE` | fallback 觸發門檻 | `0.32` |
 | `OPENAI_TIMEOUT_SEC` | OpenAI timeout 秒數 | `15` |
 | `OPENAI_MAX_NEW_TOKENS` | OpenAI fallback 最大 token | `220` |
