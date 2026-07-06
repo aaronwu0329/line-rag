@@ -464,6 +464,8 @@ https://your-domain.example/callback
 pip install -r requirements.txt
 ```
 
+`requirements.txt` 已鎖定套件版本，部署時請直接使用此檔安裝，避免不同環境因套件新版造成 reranker、FAISS 或 LINE SDK 行為差異。
+
 初次執行會下載 embedding model 與 reranker model，可能需要較久時間。
 
 ## 環境設定
@@ -501,6 +503,7 @@ OPENAI_MODEL=gpt-5.4
 | 變數 | 用途 | 預設/範例 |
 | --- | --- | --- |
 | `LOG_LEVEL` | log 等級 | `INFO` |
+| `REQUIRE_RUNTIME_SECRETS` | 啟動時是否強制檢查 LINE 與 watsonx.ai 金鑰 | `true` |
 | `IBM_API_KEY` | IBM watsonx.ai API key，必填 | 空 |
 | `IBM_PROJECT_ID` | IBM watsonx.ai project ID，必填 | 空 |
 | `IBM_CLOUD_URL` | IBM Cloud endpoint | `https://us-south.ml.cloud.ibm.com` |
@@ -511,6 +514,15 @@ OPENAI_MODEL=gpt-5.4
 | `MAX_NEW_TOKENS` | LLM 最大生成 token | `120` |
 | `MAX_OUTPUT_SENTENCES` | 回答句數上限 | `1` |
 | `MAX_OUTPUT_CHARS` | 回答字數上限 | `180` |
+| `INITIAL_K` | RRF 後送入 reranker 的候選 chunks 數 | `20` |
+| `RERANK_TOP_K` | reranker 最終保留 chunks 數；OpenAI fallback 也共用此值 | `5` |
+| `VEC_K_EACH` | 每個向量查詢取回數 | `20` |
+| `KW_K_EACH` | 每個 BM25 查詢取回數 | `20` |
+| `RRF_K` | RRF 融合排序常數 | `60` |
+| `ALPHA_VEC` | 向量分數與關鍵字分數融合權重 | `0.5` |
+| `RELEVANCE_TH` | 本機 RAG 信心門檻，也作為 fallback 預設觸發門檻 | `0.32` |
+| `RELEVANCE_TH_MODEL` | reranker 模型分數門檻 | `0.18` |
+| `MAX_CTX_CHARS` | 送入 LLM 的 context 字元上限 | `2200` |
 | `RERANKER_ID` | primary reranker | `BAAI/bge-reranker-v2-m3` |
 | `RERANKER_FALLBACK_ID` | fallback reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
 | `READ_TXT` | `ingest_xlsx.py` 是否讀 TXT | `true` |

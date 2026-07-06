@@ -66,7 +66,7 @@ def enable_fallback(env: dict, *, config: OAIConfig | None = None):
         "canonicalize_query","autocomplete_weak_query","expand_spec_synonyms",
         "hybrid_retrieve","rerank_with_crossencoder","build_context",
         "_finalize","RELEVANCE_TH","MAX_CTX_CHARS","_log_top5_after_rerank","RERANKER_NAME",
-        "call_llm",
+        "call_llm","INITIAL_K","RERANK_TOP_K",
     ]
     for k in required:
         if k not in env or env[k] is None:
@@ -91,6 +91,8 @@ def enable_fallback(env: dict, *, config: OAIConfig | None = None):
     _log_top5_after_rerank    = env["_log_top5_after_rerank"]
     RERANKER_NAME             = env["RERANKER_NAME"]
     call_llm                  = env["call_llm"]
+    INITIAL_K                 = int(env.get("INITIAL_K", 20))
+    RERANK_TOP_K              = int(env.get("RERANK_TOP_K", 5))
 
     # 指令化工具：優先用你已有的；沒有就內建一個（不依賴記憶）
     _as_instr = env.get("_as_instruction_for_prompt") or env.get("_as_question_for_prompt") or (
@@ -128,8 +130,8 @@ def enable_fallback(env: dict, *, config: OAIConfig | None = None):
             boosted = f"IBM Power {hit_models[0]} {boosted}".strip()
         boosted  = expand_spec_synonyms(boosted, hit_models)
 
-        local_candidates = hybrid_retrieve(boosted, out_k=10)
-        top_rows         = rerank_with_crossencoder(user_query, local_candidates, top_k=8)
+        local_candidates = hybrid_retrieve(boosted, out_k=INITIAL_K)
+        top_rows         = rerank_with_crossencoder(user_query, local_candidates, top_k=RERANK_TOP_K)
         try:
             _log_top5_after_rerank(user_query, top_rows, RERANKER_NAME)
         except Exception: pass

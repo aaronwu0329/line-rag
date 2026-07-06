@@ -55,6 +55,7 @@ IBM_API_KEY    = os.getenv("IBM_API_KEY")
 IBM_PROJECT_ID = os.getenv("IBM_PROJECT_ID")
 IBM_CLOUD_URL  = os.getenv("IBM_CLOUD_URL", "https://us-south.ml.cloud.ibm.com")
 IBM_MODEL_ID   = os.getenv("IBM_MODEL_ID", "openai/gpt-oss-120b")
+REQUIRE_RUNTIME_SECRETS = os.getenv("REQUIRE_RUNTIME_SECRETS", "true").lower() in {"1", "true", "yes", "on"}
 
 # Reranker
 RERANKER_ID_PRIMARY   = os.getenv("RERANKER_ID", "BAAI/bge-reranker-v2-m3")
@@ -65,16 +66,24 @@ BRAND_ASSET_BASE_URL   = os.getenv("BRAND_ASSET_BASE_URL", "").strip()       # �
 BRAND_PREVIEW_BASE_URL = os.getenv("BRAND_PREVIEW_BASE_URL", "").strip()     # 預覽縮圖（建議長效公開）
 PLACEHOLDER_IMAGE_URL  = os.getenv("PLACEHOLDER_IMAGE_URL", "").strip()      # 取不到品牌圖時的保底
 
-if not (IBM_API_KEY and IBM_PROJECT_ID):
-    raise RuntimeError("請在 .env 設定 IBM_API_KEY 與 IBM_PROJECT_ID（必要）。")
-if not (LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET):
-    raise RuntimeError("請在 .env 設定 LINE_CHANNEL_ACCESS_TOKEN 與 LINE_CHANNEL_SECRET。")
-
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format='[%(levelname)s] %(asctime)s %(message)s'
 )
+
+HAS_WATSONX_CREDS = bool(IBM_API_KEY and IBM_PROJECT_ID)
+HAS_LINE_CREDS = bool(LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET)
+if REQUIRE_RUNTIME_SECRETS:
+    if not HAS_WATSONX_CREDS:
+        raise RuntimeError("請在 .env 設定 IBM_API_KEY 與 IBM_PROJECT_ID（必要）。")
+    if not HAS_LINE_CREDS:
+        raise RuntimeError("請在 .env 設定 LINE_CHANNEL_ACCESS_TOKEN 與 LINE_CHANNEL_SECRET。")
+else:
+    if not HAS_WATSONX_CREDS:
+        logging.warning("[INIT] IBM watsonx.ai credentials missing; LLM generation is disabled.")
+    if not HAS_LINE_CREDS:
+        logging.warning("[INIT] LINE credentials missing; webhook signature validation is disabled.")
 
 logging.info(f"[IMAGE] BRAND_ASSET_BASE_URL={BRAND_ASSET_BASE_URL!r}")
 logging.info(f"[IMAGE] BRAND_PREVIEW_BASE_URL={BRAND_PREVIEW_BASE_URL!r}")
@@ -98,12 +107,14 @@ def _log_top5_after_rerank(query: str, top_rows, reranker_name: str):
 # 1) watsonx.ai 初始化（穩定輸出 + 嚴格停點）
 # =========================================================
 creds = {"url": IBM_CLOUD_URL, "apikey": IBM_API_KEY}
-wml_client = APIClient(creds)
-wml_client.set.default_project(IBM_PROJECT_ID)
+wml_client = None
+if HAS_WATSONX_CREDS:
+    wml_client = APIClient(creds)
+    wml_client.set.default_project(IBM_PROJECT_ID)
 
 MAX_NEW_TOKENS       = int(os.getenv("MAX_NEW_TOKENS", "120"))
-MAX_OUTPUT_CHARS     = int(os.getenv("MAX_OUTPUT_CHARS", "300"))
-MAX_OUTPUT_SENTENCES = int(os.getenv("MAX_OUTPUT_SENTENCES", "3"))
+MAX_OUTPUT_CHARS     = int(os.getenv("MAX_OUTPUT_CHARS", "180"))
+MAX_OUTPUT_SENTENCES = int(os.getenv("MAX_OUTPUT_SENTENCES", "1"))
 
 GEN_PARAMS = {
     "decoding_method": "greedy",
@@ -120,12 +131,14 @@ GEN_PARAMS = {
     ],
 }
 
-wx_model = ModelInference(
-    model_id=IBM_MODEL_ID,
-    params=GEN_PARAMS,
-    credentials=creds,
-    project_id=IBM_PROJECT_ID,
-)
+wx_model = None
+if HAS_WATSONX_CREDS:
+    wx_model = ModelInference(
+        model_id=IBM_MODEL_ID,
+        params=GEN_PARAMS,
+        credentials=creds,
+        project_id=IBM_PROJECT_ID,
+    )
 
 # =========================================================
 # 2) RAG 索引/嵌入 + Hybrid Retrieval + Reranker
@@ -133,15 +146,15 @@ wx_model = ModelInference(
 INDEX_PATH     = "rag_index/md_chunks.faiss"
 META_PATH      = "rag_index/md_meta.parquet"
 EMBED_MODEL    = "intfloat/multilingual-e5-base"
-INITIAL_K      = 20
-RERANK_TOP_K   = 5
-VEC_K_EACH     = 20
-KW_K_EACH      = 20
-RRF_K          = 60.0
-ALPHA_VEC      = 0.5
-RELEVANCE_TH_MODEL = 0.18
-RELEVANCE_TH   = 0.32
-MAX_CTX_CHARS  = 2200
+INITIAL_K      = int(os.getenv("INITIAL_K", "20"))
+RERANK_TOP_K   = int(os.getenv("RERANK_TOP_K", "5"))
+VEC_K_EACH     = int(os.getenv("VEC_K_EACH", "20"))
+KW_K_EACH      = int(os.getenv("KW_K_EACH", "20"))
+RRF_K          = float(os.getenv("RRF_K", "60"))
+ALPHA_VEC      = float(os.getenv("ALPHA_VEC", "0.5"))
+RELEVANCE_TH_MODEL = float(os.getenv("RELEVANCE_TH_MODEL", "0.18"))
+RELEVANCE_TH   = float(os.getenv("RELEVANCE_TH", "0.32"))
+MAX_CTX_CHARS  = int(os.getenv("MAX_CTX_CHARS", "2200"))
 
 print("Loading FAISS index & meta parquet ...")
 index = faiss.read_index(INDEX_PATH)
@@ -298,6 +311,8 @@ def to_trad_tw(s: str) -> str:
 # =========================================================
 def call_llm(prompt: str) -> str:
     try:
+        if wx_model is None:
+            raise RuntimeError("IBM watsonx.ai credentials are not configured")
         system_preamble = (
             "你是企業文件助理。只輸出一段精簡的繁體中文結論。"
             "禁止出現任何開場白、前言、導語或教學語氣，例如："
@@ -315,6 +330,8 @@ def call_llm(prompt: str) -> str:
 # ★ 新增：原生生成（不加 system、不做 finalize），專供翻譯使用
 def raw_generate(prompt: str) -> str:
     try:
+        if wx_model is None:
+            raise RuntimeError("IBM watsonx.ai credentials are not configured")
         resp = wx_model.generate(prompt=prompt)
         return _extract_text_from_wx(resp).strip()
     except Exception as e:
