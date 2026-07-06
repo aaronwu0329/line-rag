@@ -61,6 +61,25 @@ https://your-domain.example/callback
 
 如果在本機測試 LINE webhook，需要使用 ngrok、Cloudflare Tunnel 或其他反向代理工具提供公開 HTTPS URL。
 
+## English Overview
+
+This project is a Flask-based LINE Bot product assistant powered by RAG. It retrieves product knowledge with FAISS vector search, BM25 keyword search, RRF fusion, and CrossEncoder reranking, then generates concise answers through IBM watsonx.ai. When the local RAG confidence is low, the bot can optionally use an OpenAI fallback while still grounding the answer with retrieved context.
+
+Quick deployment:
+
+1. Install the pinned Python dependencies with `pip install -r requirements.txt`.
+2. Copy `.env.example` to `.env` and fill in the IBM watsonx.ai and LINE credentials.
+3. Make sure `rag_index/md_chunks.faiss` and `rag_index/md_meta.parquet` are present.
+4. Start the webhook server with `python rag_cli.py`.
+5. Configure the LINE Developers callback URL as `https://your-domain.example/callback`.
+
+Key runtime knobs:
+
+- `INITIAL_K`: number of fused retrieval candidates sent to the reranker.
+- `RERANK_TOP_K`: number of top chunks kept after reranking; the OpenAI fallback uses the same value.
+- `RELEVANCE_TH`: local RAG confidence threshold, also used as the default fallback trigger.
+- `MAX_CTX_CHARS`: maximum retrieved context length sent to the LLM.
+
 ## 啟動成功判斷
 
 啟動時會依序載入：
