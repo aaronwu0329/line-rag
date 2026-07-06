@@ -2,6 +2,72 @@
 
 這是一個以 Flask 建立的 LINE Bot 產品問答助理，使用 RAG（Retrieval-Augmented Generation）回答產品、方案與技術資訊問題。系統整合查詢改寫、FAISS 向量搜尋、BM25 關鍵字搜尋、RRF 融合排序、CrossEncoder reranking、IBM watsonx.ai 生成回答，並可在低信心情境下啟用 OpenAI fallback。
 
+## 快速開始
+
+接手工程師可以用以下順序啟動專案：
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+接著在 `.env` 填入至少四個必要金鑰：
+
+```env
+IBM_API_KEY=
+IBM_PROJECT_ID=
+LINE_CHANNEL_ACCESS_TOKEN=
+LINE_CHANNEL_SECRET=
+```
+
+確認索引檔存在：
+
+```text
+rag_index/md_chunks.faiss
+rag_index/md_meta.parquet
+```
+
+啟動服務：
+
+```bash
+python rag_cli.py
+```
+
+預設服務會監聽：
+
+```text
+http://localhost:8000
+```
+
+LINE webhook callback path 是：
+
+```text
+/callback
+```
+
+因此 LINE Developers 後台要設定成公開 HTTPS 網址，例如：
+
+```text
+https://your-domain.example/callback
+```
+
+如果在本機測試 LINE webhook，需要使用 ngrok、Cloudflare Tunnel 或其他反向代理工具提供公開 HTTPS URL。
+
+## 啟動成功判斷
+
+啟動時會依序載入：
+
+- `.env` 環境變數
+- IBM watsonx.ai client
+- `rag_index/md_chunks.faiss`
+- `rag_index/md_meta.parquet`
+- `intfloat/multilingual-e5-base` embedding model
+- BM25 corpus
+- CrossEncoder reranker
+- Flask server
+
+第一次啟動可能會下載 Hugging Face 模型，所以會比較久。若看到 Flask server 開始監聽指定 port，代表服務已啟動。實際 LINE 問答還需要 LINE webhook URL 設定正確，且 IBM watsonx.ai 金鑰有效。
+
 ## 系統總覽
 
 使用者在 LINE 輸入問題後，主程式 `rag_cli.py` 會執行以下流程：
@@ -401,6 +467,43 @@ OPENAI_MODEL=gpt-4.1-mini
 
 請勿提交 `.env`；repo 只保留 `.env.example`。
 
+## 環境變數參考
+
+| 變數 | 用途 | 預設/範例 |
+| --- | --- | --- |
+| `LOG_LEVEL` | log 等級 | `INFO` |
+| `IBM_API_KEY` | IBM watsonx.ai API key，必填 | 空 |
+| `IBM_PROJECT_ID` | IBM watsonx.ai project ID，必填 | 空 |
+| `IBM_CLOUD_URL` | IBM Cloud endpoint | `https://us-south.ml.cloud.ibm.com` |
+| `IBM_MODEL_ID` | watsonx.ai 生成模型 | `meta-llama/llama-4-maverick-17b-128e-instruct-fp8` |
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINE Bot access token，必填 | 空 |
+| `LINE_CHANNEL_SECRET` | LINE Bot channel secret，必填 | 空 |
+| `PORT` | Flask server port | `8000` |
+| `MAX_NEW_TOKENS` | LLM 最大生成 token | `120` |
+| `MAX_OUTPUT_SENTENCES` | 回答句數上限 | `1` |
+| `MAX_OUTPUT_CHARS` | 回答字數上限 | `180` |
+| `RERANKER_ID` | primary reranker | `BAAI/bge-reranker-v2-m3` |
+| `RERANKER_FALLBACK_ID` | fallback reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| `READ_TXT` | `ingest_xlsx.py` 是否讀 TXT | `true` |
+| `READ_XLSX` | `ingest_xlsx.py` 是否讀 Excel | `false` |
+| `REBUILD_MODE` | 是否重建整個索引 | `false` |
+| `TXT_DIR` | TXT 知識來源資料夾 | `txt_docs` |
+| `EXCEL_PATH` | Excel 知識來源路徑 | `Additional information` |
+| `OUT_DIR` | 索引輸出資料夾 | `rag_index` |
+| `EMBED_MODEL` | embedding 模型 | `intfloat/multilingual-e5-base` |
+| `BATCH` | embedding batch size | `64` |
+| `MAX_CHARS` | chunk 最大字元數 | `800` |
+| `OVERLAP` | chunk 重疊字元數 | `100` |
+| `BRAND_ASSET_BASE_URL` | 品牌圖片公開 base URL | 空 |
+| `BRAND_PREVIEW_BASE_URL` | LINE preview 圖片 base URL | 空 |
+| `PLACEHOLDER_IMAGE_URL` | 圖片 fallback URL | 空 |
+| `ENABLE_OPENAI_FALLBACK` | 是否啟用 OpenAI fallback | `true` |
+| `OPENAI_API_KEY` | OpenAI API key | 空 |
+| `OPENAI_MODEL` | OpenAI fallback 模型 | `gpt-4.1-mini` |
+| `OAI_MIN_LOCAL_SCORE` | fallback 觸發門檻 | `0.32` |
+| `OPENAI_TIMEOUT_SEC` | OpenAI timeout 秒數 | `15` |
+| `OPENAI_MAX_NEW_TOKENS` | OpenAI fallback 最大 token | `220` |
+
 ## 執行
 
 啟動 webhook server：
@@ -442,6 +545,100 @@ REBUILD_MODE=true python ingest_xlsx.py
 ```bash
 python build_index.py
 ```
+
+## 常見錯誤排除
+
+### 缺少 IBM 金鑰
+
+錯誤類型：
+
+```text
+RuntimeError: 請在 .env 設定 IBM_API_KEY 與 IBM_PROJECT_ID
+```
+
+處理方式：
+
+- 確認 `.env` 存在。
+- 確認 `IBM_API_KEY` 與 `IBM_PROJECT_ID` 已填入。
+- 確認 IBM Cloud URL 與 project ID 對應同一個 watsonx.ai project。
+
+### 缺少 LINE 金鑰
+
+錯誤類型：
+
+```text
+RuntimeError: 請在 .env 設定 LINE_CHANNEL_ACCESS_TOKEN 與 LINE_CHANNEL_SECRET
+```
+
+處理方式：
+
+- 到 LINE Developers 後台確認 channel access token。
+- 確認 channel secret 沒有貼錯。
+- 修改 `.env` 後重新啟動 `python rag_cli.py`。
+
+### 找不到 FAISS 或 metadata
+
+可能原因：
+
+- `rag_index/md_chunks.faiss` 不存在。
+- `rag_index/md_meta.parquet` 不存在。
+- 工作目錄不是專案根目錄。
+
+處理方式：
+
+```bash
+python ingest_xlsx.py
+```
+
+或如果已有 `chunks.parquet`：
+
+```bash
+python build_index.py
+```
+
+### Hugging Face 模型下載很久
+
+第一次啟動會下載：
+
+- `intfloat/multilingual-e5-base`
+- `BAAI/bge-reranker-v2-m3`
+- fallback 時可能下載 `cross-encoder/ms-marco-MiniLM-L-6-v2`
+
+處理方式：
+
+- 確認主機可連線到 Hugging Face。
+- 第一次啟動等待模型下載完成。
+- 若環境不能連外，需先在可連網環境預下載模型快取。
+
+### LINE webhook 沒收到訊息
+
+檢查項目：
+
+- Flask server 是否正在執行。
+- LINE Developers webhook URL 是否是公開 HTTPS。
+- URL 是否包含 `/callback`。
+- ngrok 或 Cloudflare Tunnel 是否仍在運作。
+- LINE 後台 webhook 是否啟用。
+- `LINE_CHANNEL_ACCESS_TOKEN` 與 `LINE_CHANNEL_SECRET` 是否來自同一個 channel。
+
+### LINE 圖片無法顯示
+
+LINE image message 需要公開 HTTPS 圖片 URL。本機檔案路徑不能直接給 LINE 使用。
+
+處理方式：
+
+- 將圖片部署到公開靜態檔服務。
+- 設定 `BRAND_ASSET_BASE_URL` 或 `BRAND_PREVIEW_BASE_URL`。
+- 確認圖片網址可以從外部瀏覽器直接打開。
+
+### OpenAI fallback 沒有作用
+
+檢查項目：
+
+- `ENABLE_OPENAI_FALLBACK=true`
+- `OPENAI_API_KEY` 已填入。
+- `OPENAI_MODEL` 正確。
+- 本機 RAG 分數低於 `OAI_MIN_LOCAL_SCORE` 時才會進 fallback。
 
 ## 注意事項
 
