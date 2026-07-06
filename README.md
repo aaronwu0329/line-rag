@@ -1,15 +1,62 @@
 # LINE RAG Product Assistant
 
-這是一個以 Flask 建立的 LINE Bot 產品問答助理，使用 RAG（Retrieval-Augmented Generation）流程回答產品、方案與技術資訊問題。系統會結合本機知識文件、FAISS 向量搜尋、BM25 關鍵字搜尋、reranking、IBM watsonx.ai 文字生成，並可在低信心回答時啟用 OpenAI fallback。
+這是一個以 Flask 建立的 LINE Bot 產品問答助理，使用 RAG（Retrieval-Augmented Generation）流程回答產品、方案與技術資訊問題。系統整合查詢改寫、FAISS 向量搜尋、BM25 關鍵字搜尋、RRF 融合排序、CrossEncoder reranking、IBM watsonx.ai 生成回答，並可在低信心情境下啟用 OpenAI fallback。
+
+## 核心流程
+
+使用者在 LINE 輸入問題後，系統會依序執行以下流程：
+
+1. 接收 LINE 訊息
+   - Flask webhook 接收 LINE Messaging API 傳入的使用者訊息。
+   - 先判斷是否為品牌清單、產品圖片、型號查詢或一般知識問答。
+
+2. 查詢正規化與查詢改寫
+   - 使用 `normalize_whitespace` 清理空白與格式。
+   - 使用 `canonicalize_query` 統一常見查詢格式。
+   - 使用 `normalize_brand_case` 修正品牌大小寫。
+   - 使用 `autocomplete_weak_query` 補強過短或語意不足的問題。
+   - 偵測 IBM Power 型號與品牌名稱，將查詢補成更完整的檢索語句。
+   - 使用 `expand_spec_synonyms` 展開規格同義詞，例如效能、容量、記憶體、處理器等相關問法。
+   - 針對中文查詢，使用 `translate_zh_to_en` 產生英文關鍵字，提升英文產品文件的命中率。
+
+3. Hybrid Retrieval 混合檢索
+   - FAISS 向量搜尋：使用 sentence-transformers 將查詢轉成 embedding，從 `rag_index/md_chunks.faiss` 找出語意相近內容。
+   - BM25 關鍵字搜尋：使用 `rank-bm25` 對文件文字做關鍵字比對，補足精確詞、產品名、型號與專有名詞查詢。
+   - 英文關鍵字、品牌詞與型號詞會被納入檢索，增加跨語言與產品型號查詢的穩定性。
+
+4. RRF 融合排序
+   - 系統使用 `_rrf_fuse` 將 FAISS 與 BM25 的候選結果合併。
+   - RRF（Reciprocal Rank Fusion）會根據不同檢索器中的排名給分，讓同時被多種檢索方式命中的文件優先。
+   - 此專案的融合分數同時加入原始相似度權重：
+
+```text
+融合分數 = RRF 分數 + ALPHA_VEC * 向量分數 + (1 - ALPHA_VEC) * BM25 分數
+```
+
+5. CrossEncoder Reranking
+   - RRF 產生候選文件後，系統使用 CrossEncoder reranker 重新評估「使用者問題」與「候選段落」的相關性。
+   - 最終取 rerank 分數最高的段落作為回答上下文。
+
+6. 信心門檻與回答生成
+   - 若最佳候選內容通過 relevance threshold，系統會把 top chunks 組成 context。
+   - IBM watsonx.ai 根據 context 生成正式回答。
+   - 回答會經過後處理，移除不必要格式並轉為台灣繁體中文。
+
+7. OpenAI fallback（選用）
+   - 若本機 RAG 檢索分數不足，且 `.env` 啟用 OpenAI fallback，系統會改由 OpenAI 模型補充回答。
+   - fallback 仍會先嘗試使用本機檢索結果，避免完全脫離知識庫。
 
 ## 功能特色
 
-- 使用 Flask 提供 LINE Messaging API webhook。
-- 以 FAISS 向量搜尋搭配 BM25 關鍵字搜尋做混合檢索。
-- 使用 sentence-transformers 產生 embeddings，並以 cross-encoder 重新排序候選內容。
-- 以 IBM watsonx.ai 作為主要回答生成後端。
-- 可選擇啟用 OpenAI fallback，處理本機檢索信心不足的問題。
-- 內建產品與品牌導引回覆，涵蓋 IBM、Palo Alto Networks、Qlik、Splunk、SUSE、Synopsys、TIBCO、MongoDB、Cloudera、CloudCasa、SAS 與 IBM Power 系列型號。
+- LINE Messaging API webhook。
+- 查詢正規化、查詢改寫、品牌與型號偵測。
+- 中文查詢轉英文關鍵字，提升英文產品資料命中率。
+- FAISS 向量搜尋與 BM25 關鍵字搜尋。
+- RRF 融合排序加權向量與關鍵字分數。
+- CrossEncoder reranker 重新排序候選段落。
+- IBM watsonx.ai 作為主要回答生成後端。
+- OpenAI fallback 作為低信心回答的備援機制。
+- 支援 IBM、Palo Alto Networks、Qlik、Splunk、SUSE、Synopsys、TIBCO、MongoDB、Cloudera、CloudCasa、SAS 與 IBM Power 系列型號查詢。
 - 支援透過 LINE image message 回傳品牌或產品圖片。
 - 提供 Excel、TXT、Parquet 與 FAISS index 建置腳本，方便維護知識庫。
 
@@ -19,7 +66,7 @@
 .
 ├── rag_cli.py                 # Flask 與 LINE Bot 主程式
 ├── fallback.py                # OpenAI fallback 整合
-├── product_faq.py             # 產品清單、別名與導引回覆
+├── product_faq.py             # 產品清單、別名、弱查詢補強與導引回覆
 ├── query_normalize.py         # 查詢正規化工具
 ├── ingest_xlsx.py             # 從 Excel/TXT 建立或更新 RAG index
 ├── build_index.py             # 從 chunks.parquet 建立 FAISS index
